@@ -1,0 +1,10 @@
+services:
+  xtoken:
+    image: cracktc/xtoken
+    container_name: xtoken
+    ports:
+      - 8080:80
+    environment:
+      - TOKEN=
+      - PROXIES_URL=
+      - AUTHORIZATION=
