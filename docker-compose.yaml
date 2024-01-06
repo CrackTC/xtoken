@@ -2,9 +2,10 @@ services:
   xtoken:
     image: cracktc/xtoken
     container_name: xtoken
+    restart: always
     ports:
       - 8080:80
     environment:
-      - TOKEN=
-      - PROXIES_URL=
-      - AUTHORIZATION=
+      - TOKEN=<token>
+      - PROXY_LIST_URL=<url to socks5 proxy list>
+      - AUTHORIZATION=<authorization header>
