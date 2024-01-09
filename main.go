@@ -50,6 +50,9 @@ func getGuestToken(ctx context.Context, client *http.Client) (string, error) {
 	req.Header.Set("Authorization", AUTHORIZATION)
 
 	resp, err := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()
@@ -58,7 +61,6 @@ func getGuestToken(ctx context.Context, client *http.Client) (string, error) {
 			return "", err
 		}
 	}
-	defer resp.Body.Close()
 
 	var obj JsonObject
 	err = json.NewDecoder(resp.Body).Decode(&obj)
@@ -86,6 +88,9 @@ func getFlowToken(ctx context.Context, client *http.Client, guestToken string) (
 	req.Header.Set("X-Guest-Token", guestToken)
 
 	resp, err := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()
@@ -94,7 +99,6 @@ func getFlowToken(ctx context.Context, client *http.Client, guestToken string) (
 			return "", err
 		}
 	}
-	defer resp.Body.Close()
 
 	var obj JsonObject
 	err = json.NewDecoder(resp.Body).Decode(&obj)
@@ -122,8 +126,8 @@ func getOAuthToken(ctx context.Context, client *http.Client, guestToken, flowTok
 	req.Header.Set("X-Guest-Token", guestToken)
 
 	resp, err := client.Do(req)
-	if err != nil {
-		return "", "", err
+	if resp != nil {
+		defer resp.Body.Close()
 	}
 	select {
 	case <-ctx.Done():
@@ -133,7 +137,6 @@ func getOAuthToken(ctx context.Context, client *http.Client, guestToken, flowTok
 			return "", "", err
 		}
 	}
-	defer resp.Body.Close()
 
 	var obj JsonObject
 	err = json.NewDecoder(resp.Body).Decode(&obj)
@@ -171,13 +174,13 @@ func formatRespText(oauthToken, oauthTokenSecret string) string {
 
 func getClient(proxyUrl string) *http.Client {
 	dialer, err := proxy.SOCKS5("tcp", proxyUrl, nil, proxy.Direct)
+	if err != nil {
+		panic(err)
+	}
 	dialContext := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		return dialer.Dial(network, addr)
 	}
 	transport := &http.Transport{DialContext: dialContext}
-	if err != nil {
-		panic(err)
-	}
 	return &http.Client{Transport: transport}
 }
 
@@ -187,6 +190,7 @@ func getRespText() string {
 	defer cancel()
 
 	resChan := make(chan string)
+	defer close(resChan)
 	for _, proxy := range proxyList {
 		// don't capture loop variable
 		proxy := proxy
@@ -198,7 +202,6 @@ func getRespText() string {
 			guestToken, err := getGuestToken(ctx, client)
 			if err != nil {
 				fmt.Println(err)
-				resChan <- ""
 				return
 			}
 			fmt.Println("guestToken:", guestToken)
@@ -206,7 +209,6 @@ func getRespText() string {
 			flowToken, err := getFlowToken(ctx, client, guestToken)
 			if err != nil {
 				fmt.Println(err)
-				resChan <- ""
 				return
 			}
 			fmt.Println("flowToken:", flowToken)
@@ -214,22 +216,14 @@ func getRespText() string {
 			oauthToken, oauthTokenSecret, err := getOAuthToken(ctx, client, guestToken, flowToken)
 			if err != nil {
 				fmt.Println(err)
-				resChan <- ""
 				return
 			}
-			cancel()
 			fmt.Println("oauthToken:", oauthToken)
 			resChan <- formatRespText(oauthToken, oauthTokenSecret)
 		}()
 	}
 
-	for range proxyList {
-		res := <-resChan
-		if res != "" {
-			return res
-		}
-	}
-	return ""
+	return <-resChan
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
