@@ -1,4 +1,4 @@
-name: Go & Docker Build
+name: Docker Release
 
 on:
   push:
