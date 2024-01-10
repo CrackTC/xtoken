@@ -1,30 +1,29 @@
-﻿using System.Net;
+using System.Net;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 
-static class XToken
+internal static class XToken
 {
-    static WebProxy proxy = new();
-    static HttpClientHandler handler = new() { Proxy = proxy };
-    static HttpClient client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
-    static HttpClient proxyListClient = new HttpClient() { Timeout = TimeSpan.FromSeconds(10) };
-    static string PROXY_LIST_URL = Environment.GetEnvironmentVariable("PROXY_LIST_URL")!;
-    static string AUTHORIZATION = Environment.GetEnvironmentVariable("AUTHORIZATION")!;
-    const string GUEST_TOKEN_URL = "https://api.twitter.com/1.1/guest/activate.json";
-    const string FLOW_TOKEN_URL = "https://api.twitter.com/1.1/onboarding/task.json?flow_name=welcome";
-    const string OAUTH_TOKEN_URL = "https://api.twitter.com/1.1/onboarding/task.json";
-    const string CONTENT_TYPE = "application/json";
-    const string USER_AGENT = "TwitterAndroid/10.10.0";
+    private static readonly WebProxy proxy = new();
+    private static readonly HttpClientHandler handler = new() { Proxy = proxy };
+    private static readonly HttpClient client = new(handler) { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly HttpClient proxyListClient = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly string PROXY_LIST_URL = Environment.GetEnvironmentVariable("PROXY_LIST_URL")!;
+    private static readonly string AUTHORIZATION = Environment.GetEnvironmentVariable("AUTHORIZATION")!;
+    private const string GUEST_TOKEN_URL = "https://api.twitter.com/1.1/guest/activate.json";
+    private const string FLOW_TOKEN_URL = "https://api.twitter.com/1.1/onboarding/task.json?flow_name=welcome";
+    private const string OAUTH_TOKEN_URL = "https://api.twitter.com/1.1/onboarding/task.json";
+    private const string CONTENT_TYPE = "application/json";
+    private const string USER_AGENT = "TwitterAndroid/10.10.0";
 
-    static async Task<string[]> getProxyListAsync()
+    private static async Task<string[]> GetProxyListAsync()
     {
         var response = await proxyListClient.GetAsync(PROXY_LIST_URL);
         var content = await response.Content.ReadAsStringAsync();
         return content.Split('\n');
     }
 
-    static async Task<string?> getGuestToken(string proxy, CancellationToken token)
+    private static async Task<string?> GetGuestToken(string proxy, CancellationToken token)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, GUEST_TOKEN_URL);
         request.Headers.Authorization = new("Bearer", AUTHORIZATION);
@@ -32,7 +31,7 @@ static class XToken
         {
             XToken.proxy.Address = new Uri($"socks5://{proxy}");
             var response = await client.SendAsync(request, token);
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await response.Content.ReadAsStringAsync(token);
             Console.WriteLine(content);
             var json = JsonNode.Parse(content);
             return json?["guest_token"]?.GetValue<string>();
@@ -43,12 +42,14 @@ static class XToken
         }
     }
 
-    static async Task<string?> getFlowToken(string proxy, CancellationToken ct, string guestToken)
+    private static async Task<string?> GetFlowToken(string proxy, string guestToken, CancellationToken ct)
     {
         string data = "{\"flow_token\":null,\"input_flow_data\":{\"flow_context\":{\"start_location\":{\"location\":\"splash_screen\"}}}}";
         Console.WriteLine(data);
-        var request = new HttpRequestMessage(HttpMethod.Post, FLOW_TOKEN_URL);
-        request.Content = new StringContent(data, Encoding.UTF8, CONTENT_TYPE);
+        var request = new HttpRequestMessage(HttpMethod.Post, FLOW_TOKEN_URL)
+        {
+            Content = new StringContent(data, Encoding.UTF8, CONTENT_TYPE)
+        };
         request.Headers.Authorization = new("Bearer", AUTHORIZATION);
         request.Headers.UserAgent.ParseAdd(USER_AGENT);
         request.Headers.Add("X-Guest-Token", guestToken);
@@ -57,7 +58,7 @@ static class XToken
         {
             XToken.proxy.Address = new Uri($"socks5://{proxy}");
             var response = await client.SendAsync(request, ct);
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await response.Content.ReadAsStringAsync(ct);
             Console.WriteLine(content);
             var json = JsonNode.Parse(content);
             return json?["flow_token"]?.GetValue<string>();
@@ -68,11 +69,13 @@ static class XToken
         }
     }
 
-    static async Task<(string, string)?> getOAuthToken(string proxy, CancellationToken ct, string guestToken, string flowToken)
+    private static async Task<(string, string)?> GetOAuthToken(string proxy, string guestToken, string flowToken, CancellationToken ct)
     {
         string data = $"{{\"flow_token\":\"{flowToken}\",\"subtask_inputs\":[{{\"open_link\":{{\"link\":\"next_link\"}},\"subtask_id\":\"NextTaskOpenLink\"}}]}}";
-        var request = new HttpRequestMessage(HttpMethod.Post, OAUTH_TOKEN_URL);
-        request.Content = new StringContent(data, Encoding.UTF8, CONTENT_TYPE);
+        var request = new HttpRequestMessage(HttpMethod.Post, OAUTH_TOKEN_URL)
+        {
+            Content = new StringContent(data, Encoding.UTF8, CONTENT_TYPE)
+        };
         request.Headers.Authorization = new("Bearer", AUTHORIZATION);
         request.Headers.UserAgent.ParseAdd(USER_AGENT);
         request.Headers.Add("X-Guest-Token", guestToken);
@@ -81,7 +84,7 @@ static class XToken
         {
             XToken.proxy.Address = new Uri($"socks5://{proxy}");
             var response = await client.SendAsync(request, ct);
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await response.Content.ReadAsStringAsync(ct);
             var json = JsonNode.Parse(content);
             var openAccount = json?["subtasks"]?[0]?["open_account"];
             var oauthToken = openAccount?["oauth_token"]?.GetValue<string>();
@@ -96,10 +99,10 @@ static class XToken
         }
     }
 
-    static async Task<string> getResponseText()
+    private static async Task<string> GetResponseText()
     {
         Console.WriteLine("Getting proxy list...");
-        string[] proxyList = await getProxyListAsync();
+        string[] proxyList = await GetProxyListAsync();
         Console.WriteLine($"Got {proxyList.Length} proxies");
         var cts = new CancellationTokenSource();
         var ct = cts.Token;
@@ -107,21 +110,21 @@ static class XToken
         var tasks = new List<Task<string>>();
         foreach (var proxy in proxyList)
         {
-            var task = async () =>
+            async Task<string> task()
             {
                 Console.WriteLine($"Trying {proxy}");
 
-                var guestToken = await getGuestToken(proxy, ct);
+                var guestToken = await GetGuestToken(proxy, ct);
                 if (guestToken == null)
                     return "";
                 Console.WriteLine($"Got guest token: {guestToken}");
 
-                var flowToken = await getFlowToken(proxy, ct, guestToken);
+                var flowToken = await GetFlowToken(proxy, guestToken, ct);
                 if (flowToken == null)
                     return "";
                 Console.WriteLine($"Got flow token: {flowToken}");
 
-                var oauthToken = await getOAuthToken(proxy, ct, guestToken, flowToken);
+                var oauthToken = await GetOAuthToken(proxy, guestToken, flowToken, ct);
                 if (oauthToken == null)
                     return "";
                 cts.Cancel();
@@ -129,7 +132,7 @@ static class XToken
 
                 var (token, secret) = oauthToken.Value;
                 return $"{token},{secret}";
-            };
+            }
 
             tasks.Add(task());
         }
@@ -146,7 +149,7 @@ static class XToken
         return "";
     }
 
-    public static void Main(string[] args)
+    public static void Main()
     {
         var listener = new HttpListener();
         listener.Prefixes.Add("http://*:80/");
@@ -165,7 +168,7 @@ static class XToken
                         context.Response.OutputStream.Close();
                         break;
                     }
-                    var text = getResponseText().Result;
+                    var text = GetResponseText().Result;
                     Console.WriteLine($"Response: {text}");
                     context.Response.OutputStream.Write(Encoding.UTF8.GetBytes(text));
                     context.Response.OutputStream.Close();
