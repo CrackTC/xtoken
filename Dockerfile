@@ -1,11 +1,15 @@
-FROM golang:alpine as builder
-WORKDIR /app
-RUN apk update && apk upgrade && apk add --no-cache ca-certificates
-RUN update-ca-certificates
-ADD . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o app .
+FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS build
+WORKDIR /source
+RUN apk add gcc zlib-dev musl-dev
 
-FROM scratch
-COPY --from=builder /app/app .
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-CMD ["./app"]
+COPY ./xtoken.csproj .
+RUN dotnet restore
+
+COPY ./Program.cs .
+RUN dotnet publish -c Release -o /app -r linux-musl-x64
+
+FROM mcr.microsoft.com/dotnet/runtime:8.0-alpine
+EXPOSE 80
+COPY --from=build /app /app
+WORKDIR /app
+ENTRYPOINT ["./xtoken"]
