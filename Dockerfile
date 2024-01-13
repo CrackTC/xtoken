@@ -8,8 +8,9 @@ RUN dotnet restore
 COPY ./Program.cs .
 RUN dotnet publish -c Release -o /app -r linux-musl-x64
 
-FROM mcr.microsoft.com/dotnet/runtime:8.0-alpine
+FROM alpine
 EXPOSE 80
-COPY --from=build /app /app
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+COPY --from=build /app/xtoken /app/
 WORKDIR /app
-ENTRYPOINT ["./xtoken"]
+CMD [ "./xtoken" ]
