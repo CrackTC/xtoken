@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -29,7 +30,7 @@ internal static class XToken
         {
             var response = await client.SendAsync(request, token);
             var content = await response.Content.ReadAsStringAsync(token);
-            Console.WriteLine(content);
+            Console.Error.WriteLine(content);
             var json = JsonNode.Parse(content);
             return json?["guest_token"]?.GetValue<string>();
         }
@@ -42,7 +43,7 @@ internal static class XToken
     private static async Task<string?> GetFlowToken(HttpClient client, string guestToken, CancellationToken ct)
     {
         string data = "{\"flow_token\":null,\"input_flow_data\":{\"flow_context\":{\"start_location\":{\"location\":\"splash_screen\"}}}}";
-        Console.WriteLine(data);
+        Console.Error.WriteLine(data);
         var request = new HttpRequestMessage(HttpMethod.Post, FLOW_TOKEN_URL)
         {
             Content = new StringContent(data, Encoding.UTF8, CONTENT_TYPE)
@@ -55,7 +56,7 @@ internal static class XToken
         {
             var response = await client.SendAsync(request, ct);
             var content = await response.Content.ReadAsStringAsync(ct);
-            Console.WriteLine(content);
+            Console.Error.WriteLine(content);
             var json = JsonNode.Parse(content);
             return json?["flow_token"]?.GetValue<string>();
         }
@@ -80,7 +81,7 @@ internal static class XToken
         {
             var response = await client.SendAsync(request, ct);
             var content = await response.Content.ReadAsStringAsync(ct);
-            Console.WriteLine(content);
+            Console.Error.WriteLine(content);
             var json = JsonNode.Parse(content);
             var openAccount = json?["subtasks"]?[0]?["open_account"];
             var oauthToken = openAccount?["oauth_token"]?.GetValue<string>();
@@ -97,9 +98,9 @@ internal static class XToken
 
     private static async Task<string> GetResponseText()
     {
-        Console.WriteLine("Getting proxy list...");
+        Console.Error.WriteLine("Getting proxy list...");
         string[] proxyList = await GetProxyListAsync();
-        Console.WriteLine($"Got {proxyList.Length} proxies");
+        Console.Error.WriteLine($"Got {proxyList.Length} proxies");
         var cts = new CancellationTokenSource();
         var ct = cts.Token;
 
@@ -119,7 +120,7 @@ internal static class XToken
                     return "";
                 }
 
-                Console.WriteLine($"Trying {proxy}");
+                Console.Error.WriteLine($"Trying {proxy}");
                 var clientHandler = new HttpClientHandler { Proxy = new WebProxy($"socks5://{proxy}") };
                 var client = new HttpClient(clientHandler, true) { Timeout = TimeSpan.FromSeconds(3) };
 
@@ -129,7 +130,7 @@ internal static class XToken
                     semaphore.Release();
                     return "";
                 }
-                Console.WriteLine($"Got guest token: {guestToken}");
+                Console.Error.WriteLine($"Got guest token: {guestToken}");
 
                 var flowToken = await GetFlowToken(client, guestToken, ct);
                 if (flowToken == null)
@@ -137,7 +138,7 @@ internal static class XToken
                     semaphore.Release();
                     return "";
                 }
-                Console.WriteLine($"Got flow token: {flowToken}");
+                Console.Error.WriteLine($"Got flow token: {flowToken}");
 
                 var oauthToken = await GetOAuthToken(client, guestToken, flowToken, ct);
                 if (oauthToken == null)
@@ -146,7 +147,7 @@ internal static class XToken
                     return "";
                 }
                 cts.Cancel();
-                Console.WriteLine($"Got oauth token: {oauthToken}");
+                Console.Error.WriteLine($"Got oauth token: {oauthToken}");
 
                 var (token, secret) = oauthToken.Value;
                 semaphore.Release();
@@ -168,12 +169,18 @@ internal static class XToken
         return "";
     }
 
-    public static void Main()
+    public static void Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "get")
+        {
+            Console.WriteLine(GetResponseText().Result);
+            return;
+        }
+
         var listener = new HttpListener();
         listener.Prefixes.Add("http://*:80/");
         listener.Start();
-        Console.WriteLine("Listening...");
+        Console.Error.WriteLine("Listening...");
         while (true)
         {
             var context = listener.GetContext();
@@ -187,8 +194,14 @@ internal static class XToken
                         context.Response.OutputStream.Close();
                         break;
                     }
-                    var text = GetResponseText().Result;
-                    Console.WriteLine($"Response: {text}");
+                    var text = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "./xtoken",
+                        Arguments = "get",
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false
+                    })?.StandardOutput.ReadToEnd() ?? "";
+                    Console.Error.WriteLine($"Response: {text}");
                     context.Response.OutputStream.Write(Encoding.UTF8.GetBytes(text));
                     context.Response.OutputStream.Close();
                     break;
