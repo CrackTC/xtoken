@@ -6,10 +6,11 @@ internal static class XToken
 {
     private static readonly WebProxy proxy = new();
     private static readonly HttpClientHandler handler = new() { Proxy = proxy };
-    private static readonly HttpClient client = new(handler) { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly HttpClient client = new(handler) { Timeout = TimeSpan.FromSeconds(60) };
     private static readonly HttpClient proxyListClient = new() { Timeout = TimeSpan.FromSeconds(10) };
     private static readonly string PROXY_LIST_URL = Environment.GetEnvironmentVariable("PROXY_LIST_URL")!;
-    private static readonly string AUTHORIZATION = Environment.GetEnvironmentVariable("AUTHORIZATION")!;
+    private static readonly string AUTHORIZATION = Environment.GetEnvironmentVariable("AUTHORIZATION")
+        ?? "AAAAAAAAAAAAAAAAAAAAAFXzAwAAAAAAMHCxpeSDG1gLNLghVe8d74hl6k4%3DRUMF4xAQLsbeBhTSRrCiQpJtxoGWeyHrDb5te2jpGskWDFW82F";
     private const string GUEST_TOKEN_URL = "https://api.twitter.com/1.1/guest/activate.json";
     private const string FLOW_TOKEN_URL = "https://api.twitter.com/1.1/onboarding/task.json?flow_name=welcome";
     private const string OAUTH_TOKEN_URL = "https://api.twitter.com/1.1/onboarding/task.json";
@@ -85,6 +86,7 @@ internal static class XToken
             XToken.proxy.Address = new Uri($"socks5://{proxy}");
             var response = await client.SendAsync(request, ct);
             var content = await response.Content.ReadAsStringAsync(ct);
+            Console.WriteLine(content);
             var json = JsonNode.Parse(content);
             var openAccount = json?["subtasks"]?[0]?["open_account"];
             var oauthToken = openAccount?["oauth_token"]?.GetValue<string>();
