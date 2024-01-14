@@ -104,7 +104,7 @@ internal static class XToken
         var cts = new CancellationTokenSource();
         var ct = cts.Token;
 
-        var semaphore = new SemaphoreSlim(300);
+        var semaphore = new SemaphoreSlim(1000);
 
         var tasks = new List<Task<string>>();
         foreach (var proxy in proxyList)
@@ -121,8 +121,8 @@ internal static class XToken
                 }
 
                 Console.Error.WriteLine($"Trying {proxy}");
-                var clientHandler = new HttpClientHandler { Proxy = new WebProxy($"socks5://{proxy}") };
-                var client = new HttpClient(clientHandler, true) { Timeout = TimeSpan.FromSeconds(3) };
+                var clientHandler = new HttpClientHandler { Proxy = new WebProxy($"{proxy}") };
+                var client = new HttpClient(clientHandler, true) { Timeout = TimeSpan.FromSeconds(20) };
 
                 var guestToken = await GetGuestToken(client, ct);
                 if (guestToken == null)
