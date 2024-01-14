@@ -2,11 +2,14 @@ using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 internal static class XToken
 {
     private static readonly HttpClient proxyListClient = new() { Timeout = TimeSpan.FromSeconds(10) };
     private static readonly string PROXY_LIST_URL = Environment.GetEnvironmentVariable("PROXY_LIST_URL")!;
+    private static readonly string PROXY_MATCH_PATTERN = Environment.GetEnvironmentVariable("PROXY_MATCH_PATTERN") ?? "(\\d+\\.\\d+\\.\\d+\\.\\d+:\\d+)";
+    private static readonly string PROXY_REPLACE_PATTERN = Environment.GetEnvironmentVariable("PROXY_REPLACE_PATTERN") ?? "socks5://$1";
     private static readonly string AUTHORIZATION = Environment.GetEnvironmentVariable("AUTHORIZATION")
         ?? "AAAAAAAAAAAAAAAAAAAAAFXzAwAAAAAAMHCxpeSDG1gLNLghVe8d74hl6k4%3DRUMF4xAQLsbeBhTSRrCiQpJtxoGWeyHrDb5te2jpGskWDFW82F";
     private const string GUEST_TOKEN_URL = "https://api.twitter.com/1.1/guest/activate.json";
@@ -103,11 +106,12 @@ internal static class XToken
         Console.Error.WriteLine($"Got {proxyList.Length} proxies");
         var cts = new CancellationTokenSource();
         var ct = cts.Token;
+        var regex = new Regex(PROXY_MATCH_PATTERN);
 
         var semaphore = new SemaphoreSlim(1000);
 
         var tasks = new List<Task<string>>();
-        foreach (var proxy in proxyList)
+        foreach (var proxy in proxyList.Select(p => regex.Replace(p, PROXY_REPLACE_PATTERN)))
         {
             async Task<string> task()
             {
