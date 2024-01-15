@@ -25,7 +25,16 @@ services:
 
 Simply send a GET request to `/` with `token=<token>` url parameter.
 
-The response is in `<oauth_token>,<oauth_token_secret>` format.
+The response will be a json
+
+```json
+{
+    "oauth_token": "...",
+    "oauth_token_secret": "...",
+    "proxy": "..."
+}
+```
+
 
 ## Example
 
