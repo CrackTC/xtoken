@@ -155,7 +155,7 @@ internal static class XToken
 
                 var (token, secret) = oauthToken.Value;
                 semaphore.Release();
-                return string.Format("""{"oauth_token": "{}", "oauth_token_secret": "{}", "proxy": "{}"}""", token, secret, proxy);
+                return string.Format("""{{"oauth_token": "{0}", "oauth_token_secret": "{1}", "proxy": "{2}"}}""", token, secret, proxy);
             }
 
             tasks.Add(task());
