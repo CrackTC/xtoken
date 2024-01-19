@@ -187,6 +187,7 @@ internal static class XToken
         Console.Error.WriteLine("Listening...");
         while (true)
         {
+            GC.Collect(generation: 2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
             var context = listener.GetContext();
             switch (context.Request.Url?.AbsolutePath)
             {
